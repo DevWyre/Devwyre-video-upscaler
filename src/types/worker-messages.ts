@@ -14,7 +14,7 @@ export type WorkerRequestMessage =
   | { cmd: 'init'; data: InitData }
   | { cmd: 'network'; data: NetworkData }
   | { cmd: 'resolution'; data: Resolution }
-  | { cmd: 'process'; inputHandle: FileSystemFileHandle; outputHandle?: FileSystemFileHandle }
+  | { cmd: 'process'; file: File; outputHandle?: FileSystemFileHandle }
   | { cmd: 'pause' }
   | { cmd: 'resume' }
   | { cmd: 'cancel' };

@@ -39,7 +39,8 @@ let outputHeight = 0;
 
 // Video data
 let download_name: string;
-let inputFileHandle: FileSystemFileHandle;
+let inputFile: File;
+let outputHandle: FileSystemFileHandle | undefined;
 let gpu: any;
 let websr: WebSR;
 
@@ -127,7 +128,22 @@ async function index(): Promise<void> {
 
     if (!("VideoEncoder" in window)) return showUnsupported("WebCodecs");
 
-    if (!window.showSaveFilePicker) return showUnsupported("File Write System API");
+    // Quick, friendly check: WebGPU must exist on the main thread too. The
+    // worker re-verifies before starting, but this lets us fail fast and
+    // show a clear message on Firefox / Safari / most mobile browsers where
+    // the AI models simply cannot run.
+    if (!("gpu" in navigator) || !((navigator as any).gpu)) {
+        return showUnsupported("WebGPU");
+    }
+
+    // Wire up the universal file-input fallback (works on all browsers
+    // including those without the File System Access API and on mobile).
+    document.getElementById('file-input')?.addEventListener('change', (e) => {
+        const input = e.target as HTMLInputElement;
+        const selected = input.files && input.files[0];
+        input.value = '';
+        if (selected) loadVideo(selected);
+    });
 
     worker.postMessage({ cmd: 'isSupported' } satisfies WorkerRequestMessage);
 
@@ -143,38 +159,46 @@ function showUnsupported(text: string): void {
 }
 
 /**
- * Prompt user to choose a video file using File System Access API
+ * Prompt user to choose a video file. Uses the File System Access API on
+ * browsers that support it (Chrome/Edge desktop), and falls back to a
+ * standard <input type="file"> on every other browser and on mobile.
  */
 async function chooseFile(e?: Event): Promise<void> {
-    try {
-        const [fileHandle] = await window.showOpenFilePicker({
-            types: [{
-                description: 'Video Files',
-                accept: { 'video/mp4': ['.mp4'] }
-            }],
-            multiple: false
-        });
+    // Prefer the native picker where available
+    if (window.showOpenFilePicker) {
+        try {
+            const [fileHandle] = await window.showOpenFilePicker({
+                types: [{
+                    description: 'Video Files',
+                    accept: { 'video/mp4': ['.mp4'] }
+                }],
+                multiple: false
+            });
 
-        await loadVideo(fileHandle);
-    } catch (e) {
-        // User cancelled file picker
-        console.log('File selection cancelled');
+            // Read it as a File now so the worker only ever deals with a File,
+            // regardless of which picker produced it.
+            const file = await fileHandle.getFile();
+            await loadVideo(file);
+            return;
+        } catch (err) {
+            // User cancelled or the picker failed — fall through to the
+            // universal file input as a graceful fallback.
+            console.log('File picker cancelled/failed, using fallback', err);
+        }
     }
+
+    // Universal fallback: works in every browser and on mobile
+    (document.getElementById('file-input') as HTMLInputElement)?.click();
 }
 
-//===================  Preview ===========================
-
 /**
- * Load video file from FileSystemFileHandle
+ * Load video file (from either the native picker or the file-input fallback)
  */
-async function loadVideo(fileHandle: FileSystemFileHandle): Promise<void> {
+async function loadVideo(file: File): Promise<void> {
     Alpine.store('state', 'loading');
 
-    // Store the file handle for later processing
-    inputFileHandle = fileHandle;
-
-    // Get the file to create a preview
-    const file = await fileHandle.getFile();
+    // Store the file for later processing
+    inputFile = file;
 
     // Set up download name
     download_name = file.name.split(".")[0] + "-upscaled.mp4";
@@ -220,6 +244,36 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
         imageCompare.style.margin = 'auto';
         imageCompare.style.position = 'relative';
 
+        // Keep the before/after preview within the viewport on small screens:
+        // cap by width first (mobile landscape/portrait), else keep the
+        // desktop height.
+        const cap = () => {
+            const padding = 40;
+            const maxW = Math.max(260, window.innerWidth - padding);
+            const aspect = video.videoWidth / video.videoHeight;
+            let w = maxW;
+            let h = w / aspect;
+            if (h > window.innerHeight * 0.6) {
+                h = window.innerHeight * 0.6;
+                w = h * aspect;
+            }
+            imageCompare.style.width = `${Math.round(w)}px`;
+            imageCompare.style.height = `${Math.round(h)}px`;
+            position();
+        };
+        const position = () => {
+            const containerWidth = Math.round(imageCompare.offsetWidth) || Math.round(video.videoWidth / video.videoHeight * 318);
+            const containerHeight = Math.round(imageCompare.offsetHeight) || 318;
+            const fullScreenButton = document.getElementById('full-screen');
+            if (fullScreenButton) {
+                fullScreenButton.style.left = `${imageCompare.offsetLeft + containerWidth - 20}px`;
+                fullScreenButton.style.top = `${imageCompare.offsetTop + containerHeight - 20}px`;
+            }
+        };
+        window.addEventListener('resize', cap);
+        (window as any).__imageCompareCap = cap;
+        (window as any).__imageComparePosition = position;
+
 
         new ImageCompare(document.getElementById('image-compare')).mount();
         video.currentTime = video.duration * 0.2 || 0;
@@ -241,9 +295,6 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
 
 
     async function showPreview(){
-
-        const fullScreenButton = document.getElementById('full-screen');
-
 
         window.initRecording = initRecording;
         window.fullScreenPreview = fullScreenPreview;
@@ -302,18 +353,15 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
 
 
 
-        function setFullScreenLocation(){
-            const containerWidth = Math.round(video.videoWidth/video.videoHeight*318);
-            const containerHeight = 318;
-            
-            // Position at bottom-right of the preview container (with small padding)
-            fullScreenButton.style.left = `${imageCompare.offsetLeft + containerWidth - 20}px`;
-            fullScreenButton.style.top = `${imageCompare.offsetTop + containerHeight - 20}px`;
-        }
+        // Position full-screen button in the corner and re-run on layout
+        const positionFullScreen = () => {
+            const position = (window as any).__imageComparePosition;
+            if (typeof position === 'function') position();
+        };
 
-        setTimeout(setFullScreenLocation, 20);
-        setTimeout(setFullScreenLocation, 60);
-        setTimeout(setFullScreenLocation, 200);
+        setTimeout(positionFullScreen, 20);
+        setTimeout(positionFullScreen, 60);
+        setTimeout(positionFullScreen, 200);
 
 
 
@@ -329,7 +377,6 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
                 
                 // Reset container styles to original preview dimensions
                 const imageCompareOuter = document.getElementById('image-compare-outer');
-                const imageCompareInner = document.getElementById('image-compare');
                 
                 // Reset outer container
                 imageCompareOuter.style.width = ``;
@@ -338,12 +385,10 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
                 imageCompareOuter.style.display = ``;
                 imageCompareOuter.style.justifyContent = ``;
                 imageCompareOuter.style.alignItems = ``;
-                
-                // Reset inner container to original preview size
-                imageCompareInner.style.height = '318px';
-                imageCompareInner.style.width = `${Math.round(video.videoWidth/video.videoHeight*318)}px`;
-                imageCompareInner.style.margin = 'auto';
-                imageCompareInner.style.position = 'relative';
+
+                // Re-apply responsive preview sizing on exit from fullscreen
+                const cap = (window as any).__imageCompareCap;
+                if (typeof cap === 'function') cap();
             }
         });
 
@@ -584,10 +629,15 @@ async function initRecording(): Promise<void> {
     let bitrate = getBitrate();
     const estimated_size = (bitrate / 8) * video.duration + (128 / 8) * video.duration; // Assume 128 kbps audio
 
-    let outputHandle: FileSystemFileHandle | undefined;
+    outputHandle = undefined;
 
-    // Max Blob size - 10 MB (for testing, should be much higher in production)
+    // Max Blob size - large results streamed to disk require the File System
+    // Access API (Chrome/Edge desktop). On browsers without it, fall back to
+    // an in-memory blob and refuse jobs that would exceed the blob limit.
     if (estimated_size > MAX_FILE_BLOB_SIZE) {
+        if (!window.showSaveFilePicker) {
+            return showError(`The video is too big. The output would be about ${humanFileSize(estimated_size)}, which needs a browser with File System Access support. Please use Chrome or Edge on desktop, or choose a shorter video.`);
+        }
         try {
             outputHandle = await showFilePicker();
         } catch (e) {
@@ -598,7 +648,7 @@ async function initRecording(): Promise<void> {
 
     worker.postMessage({
         cmd: "process",
-        inputHandle: inputFileHandle,
+        file: inputFile,
         outputHandle
     } satisfies WorkerRequestMessage);
 }

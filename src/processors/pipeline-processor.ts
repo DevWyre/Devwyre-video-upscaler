@@ -11,7 +11,7 @@ import WebSR from '@websr/websr';
 import InMemoryStorage from './in-memory-storage';
 
 interface ProcessorArgs {
-  inputHandle: FileSystemFileHandle;
+  file: File;
   outputHandle?: FileSystemFileHandle;
   websr: WebSR;
   upscaled_canvas: OffscreenCanvas;
@@ -394,14 +394,12 @@ function prettyTime(secs: number): string {
  * Main pipeline processor using Streams API
  */
 export default async function pipelineProcessor(args: ProcessorArgs): Promise<void> {
-  const { inputHandle, outputHandle, websr, upscaled_canvas, original_canvas, resolution, getPauseLock, signal } = args;
+  const { file, outputHandle, websr, upscaled_canvas, original_canvas, resolution, getPauseLock, signal } = args;
 
   console.log('Starting pipeline processor with Streams API');
 
-  // Get file from handle
-  const file = await inputHandle.getFile();
-
-  // Initialize demuxer
+  // Initialize demuxer (takes a File directly — works with plain file-picker
+  // file inputs on every browser, not just File System Access API browsers)
   const demuxer = new WebDemuxer({
     wasmFilePath: "https://cdn.jsdelivr.net/npm/web-demuxer@latest/dist/wasm-files/web-demuxer.wasm",
   });

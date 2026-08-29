@@ -210,7 +210,7 @@ self.onmessage = async function (event: MessageEvent<WorkerRequestMessage>) {
       abortController = new AbortController();
 
       await pipelineProcessor({
-        inputHandle: event.data.inputHandle,
+        file: event.data.file,
         outputHandle: event.data.outputHandle,
         websr,
         upscaled_canvas,
