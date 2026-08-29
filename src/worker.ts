@@ -7,13 +7,16 @@ import type {
   NetworkData,
   Resolution
 } from './types/worker-messages';
+import type { UpscalerBackend, UpscalerLike } from './lib/upscaler';
+import { WebGPUWebSR } from './lib/upscaler';
+import CpuWebSR from './lib/cpu-upscaler';
 
 // Processors
 import pipelineProcessor from './processors/pipeline-processor';
 
 // Worker state
 let gpu: any | false;
-let websr: WebSR;
+let upscaler: UpscalerLike;
 let upscaled_canvas: OffscreenCanvas;
 let original_canvas: OffscreenCanvas;
 let resolution: Resolution;
@@ -24,44 +27,91 @@ let abortController: AbortController | null = null;
 let currentNetworkName = "anime4k/cnn-2x-m";
 let currentWeights: any = require('./weights/cnn-2x-m-rl.json');
 
-// Default weights
-const weights = require('./weights/cnn-2x-m-rl.json');
+// Which backend to run the AI on, decided once per worker lifetime.
+let backend: UpscalerBackend = 'cpu';
+let backendResolved: Promise<UpscalerBackend> | null = null;
 
 /**
- * Check if WebGPU is supported in this environment
+ * Detect the best available backend. WebGPU is used when it exists, otherwise
+ * the pure-JS CPU engine makes the app work in every other browser.
+ */
+function resolveBackend(): Promise<UpscalerBackend> {
+  if (!backendResolved) {
+    backendResolved = (async () => {
+      try {
+        gpu = await WebSR.initWebGPU();
+        backend = gpu !== false ? 'webgpu' : 'cpu';
+      } catch (e) {
+        console.warn('WebGPU init failed, falling back to CPU upscaler', e);
+        gpu = false;
+        backend = 'cpu';
+      }
+      return backend;
+    })();
+  }
+  return backendResolved;
+}
+
+/**
+ * Check what's supported and report which backend will be used.
  */
 async function isSupported(): Promise<void> {
-  gpu = await WebSR.initWebGPU();
+  const result = await resolveBackend();
 
   postMessage({
     cmd: 'isSupported',
-    data: gpu !== false
+    data: true,
+    backend: result
   } satisfies WorkerResponseMessage);
 }
 
 /**
- * Initialize the worker with canvases and create WebSR instance
+ * Build the chosen upscaler for the current resolution. Falls back to the CPU
+ * engine if WebGPU setup throws for any reason.
+ */
+function buildWebGPUUpscaler(): UpscalerLike {
+  const websr = new WebSR({
+    network_name: currentNetworkName as any,
+    weights: currentWeights,
+    resolution,
+    gpu: gpu,
+    canvas: upscaled_canvas as any
+  });
+  return new WebGPUWebSR(websr, upscaled_canvas);
+}
+
+function buildUpscaler(): UpscalerLike {
+  if (backend === 'webgpu') {
+    try {
+      return buildWebGPUUpscaler();
+    } catch (e) {
+      console.warn('WebGPU upscaler failed to build, falling back to CPU', e);
+      backend = 'cpu';
+    }
+  }
+  return new CpuWebSR({
+    network_name: currentNetworkName,
+    weights: currentWeights,
+    resolution,
+    canvas: upscaled_canvas
+  });
+}
+
+/**
+ * Initialize the worker with canvases and create the upscaler instance
  */
 async function init(config: InitData): Promise<void> {
-  if (!gpu) {
-    gpu = await WebSR.initWebGPU();
-  }
-
-  websr = new WebSR({
-    network_name: "anime4k/cnn-2x-m",
-    weights,
-    resolution: config.resolution,
-    gpu: gpu,
-    canvas: config.upscaled as any // OffscreenCanvas is valid but types may be strict
-  });
+  await resolveBackend();
 
   resolution = config.resolution;
   upscaled_canvas = config.upscaled;
   original_canvas = config.original;
 
+  upscaler = buildUpscaler();
+
   ctx = original_canvas.getContext('bitmaprenderer');
 
-  // WebSR must sample input at exactly the resolution it was built with
+  // The upscaler must sample input at exactly the resolution it was built with
   let renderInput: any = config.bitmap;
   if (config.bitmap.width !== resolution.width || config.bitmap.height !== resolution.height) {
     renderInput = await createImageBitmap(config.bitmap, {
@@ -70,7 +120,7 @@ async function init(config: InitData): Promise<void> {
     });
   }
 
-  await websr.render(renderInput as any);
+  await upscaler!.render(renderInput as any);
 
   if (renderInput !== config.bitmap) {
     (renderInput as ImageBitmap).close();
@@ -92,7 +142,7 @@ async function init(config: InitData): Promise<void> {
 async function switchNetwork(name: string, weightData: any, bitmap: ImageBitmap): Promise<void> {
   currentNetworkName = name;
   currentWeights = weightData;
-  websr.switchNetwork(name as any, weightData);
+  upscaler!.switchNetwork(name, weightData);
 
   let renderInput: any = bitmap;
   if (bitmap.width !== resolution.width || bitmap.height !== resolution.height) {
@@ -102,7 +152,7 @@ async function switchNetwork(name: string, weightData: any, bitmap: ImageBitmap)
     });
   }
 
-  await websr.render(renderInput as any);
+  await upscaler!.render(renderInput as any);
 
   if (renderInput !== bitmap) {
     (renderInput as ImageBitmap).close();
@@ -120,38 +170,35 @@ async function switchNetwork(name: string, weightData: any, bitmap: ImageBitmap)
 }
 
 /**
- * Change the output resolution: resize the canvases and rebuild WebSR for
- * the new input resolution (the canvas is target-sized = resolution x 2).
+ * Change the output resolution: resize the canvases and rebuild the upscaler
+ * for the new input resolution (the canvas is target-sized = resolution x 2).
  *
- * The old WebSR instance is abandoned rather than destroyed: its
- * WebGPUContext#destroy() tears down the whole GPU device, and the canvas
+ * On the WebGPU path the old WebSR instance is abandoned rather than destroyed:
+ * its WebGPUContext#destroy() tears down the whole GPU device, and the canvas
  * context cannot be reconfigured afterwards. The same device is reused.
  */
 async function setResolution(res: Resolution): Promise<void> {
-  resolution = res;
+  if (!resolution || resolution.width !== res.width || resolution.height !== res.height) {
+    resolution = res;
 
-  upscaled_canvas.width = res.width * 2;
-  upscaled_canvas.height = res.height * 2;
-  original_canvas.width = res.width * 2;
-  original_canvas.height = res.height * 2;
+    upscaled_canvas.width = res.width * 2;
+    upscaled_canvas.height = res.height * 2;
+    original_canvas.width = res.width * 2;
+    original_canvas.height = res.height * 2;
+  }
 
-  if (!gpu) {
-    gpu = await WebSR.initWebGPU();
-    if (!gpu) {
-      postMessage({ cmd: 'error', data: 'WebGPU unavailable' } satisfies WorkerResponseMessage);
+  const wasCpu = backend === 'cpu';
+
+  if (wasCpu || !gpu) {
+    await resolveBackend();
+    if (backend === 'cpu') {
+      (upscaler as unknown as CpuWebSR).setResolution(res);
       return;
     }
   }
 
-  websr = new WebSR({
-    network_name: currentNetworkName as any,
-    weights: currentWeights,
-    resolution: res,
-    gpu: gpu,
-    canvas: upscaled_canvas as any
-  });
+  upscaler = buildUpscaler();
 }
-
 
 
 
@@ -212,8 +259,7 @@ self.onmessage = async function (event: MessageEvent<WorkerRequestMessage>) {
       await pipelineProcessor({
         file: event.data.file,
         outputHandle: event.data.outputHandle,
-        websr,
-        upscaled_canvas,
+        upscaler,
         original_canvas,
         resolution,
         getPauseLock: () => pauseLock,

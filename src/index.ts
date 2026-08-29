@@ -116,6 +116,7 @@ async function index(): Promise<void> {
     Alpine.store('previewLeft', '0:00');
     Alpine.store('previewTotal', '0:00');
     Alpine.store('resSizes', { '1080': '', '2k': '', '4k': '', '8k': '' });
+    Alpine.store('backend', 'webgpu');
 
     window.goHome = goHome;
     window.seekPreview = seekPreview;
@@ -126,14 +127,12 @@ async function index(): Promise<void> {
     upscaled_canvas = document.getElementById("upscaled") as HTMLCanvasElement;
     original_canvas = document.getElementById('original') as HTMLCanvasElement;
 
-    if (!("VideoEncoder" in window)) return showUnsupported("WebCodecs");
-
-    // Quick, friendly check: WebGPU must exist on the main thread too. The
-    // worker re-verifies before starting, but this lets us fail fast and
-    // show a clear message on Firefox / Safari / most mobile browsers where
-    // the AI models simply cannot run.
-    if (!("gpu" in navigator) || !((navigator as any).gpu)) {
-        return showUnsupported("WebGPU");
+    // WebCodecs is the single hard requirement — without it we can't decode or
+    // encode video at all. The AI upscaler itself runs via WebGPU when possible
+    // and falls back to the built-in CPU engine on every other browser, so we
+    // deliberately do NOT gate on WebGPU here anymore.
+    if (!("VideoEncoder" in window) || !("VideoDecoder" in window)) {
+        return showUnsupported("WebCodecs");
     }
 
     // Wire up the universal file-input fallback (works on all browsers
@@ -510,6 +509,9 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
 worker.onmessage = function (event: MessageEvent<WorkerResponseMessage>) {
     if (event.data.cmd === 'isSupported') {
         const supported = event.data.data;
+
+        // Record the active backend so the UI can show CPU-mode messaging.
+        Alpine.store('backend', event.data.backend || 'webgpu');
 
         if (!supported) return showUnsupported("WebGPU");
 

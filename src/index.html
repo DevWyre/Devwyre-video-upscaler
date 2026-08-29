@@ -64,7 +64,10 @@
              x-show="$store.state === 'init' || $store.state === 'unsupported'">
         <span class="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3.5 py-1 text-xs font-bold uppercase tracking-wide text-teal-700">
             <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
-            100% local · WebGPU · Free
+            100% local ·
+            <span x-text="$store.backend === 'cpu' ? 'CPU mode' : 'WebGPU'"
+                  class="transition-colors" x-bind:class="$store.backend === 'cpu' ? 'text-amber-600' : 'text-teal-700'"></span>
+            · Free
         </span>
 
         <h1 id="title" class="mt-6 text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl">
@@ -73,7 +76,9 @@
         </h1>
 
         <p id="hero-text" class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
-            Turn any MP4 into crisp 1080p, 2K, 4K or even 8K video with cutting-edge AI super-resolution models running on WebGPU.
+            Turn any MP4 into crisp 1080p, 2K, 4K or even 8K video with cutting-edge AI super-resolution models running
+            on your own device — GPU-accelerated via WebGPU when available, with a built-in
+            <span class="font-bold text-slate-800">CPU fallback</span> that works in every other browser.
             No signups, no installs, no uploads — your files never leave your device.
         </p>
     </section>
@@ -105,7 +110,7 @@
                     </svg>
                 </div>
                 <h3 class="mt-4 text-base font-extrabold text-slate-900">2. AI upscales it</h3>
-                <p class="mt-1.5 text-sm leading-relaxed text-slate-500">Super-resolution models run in real time on your own graphics card via WebGPU. Preview the result with a before/after slider.</p>
+                <p class="mt-1.5 text-sm leading-relaxed text-slate-500">Super-resolution models run on your own device — accelerated by your graphics card via WebGPU when available, and by a built-in CPU fallback everywhere else. Preview the result with a before/after slider.</p>
             </div>
 
             <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md">
@@ -168,7 +173,7 @@
                     </li>
                     <li class="flex items-start gap-3">
                         <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">3</span>
-                        <span><strong class="font-bold text-slate-800">Reconstruct.</strong> Each frame runs through the AI model on your own graphics card (WebGPU), doubling the resolution and rebuilding lost detail. Models range from Fast to Ultra — more compute, even sharper results.</span>
+                        <span><strong class="font-bold text-slate-800">Reconstruct.</strong> Each frame runs through the AI model on your own device — your graphics card via WebGPU when available, or a built-in CPU fallback on any other browser — doubling the resolution and rebuilding lost detail. Models range from Fast to Ultra — more compute, even sharper results.</span>
                     </li>
                     <li class="flex items-start gap-3">
                         <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">4</span>
@@ -194,6 +199,24 @@
     <div id="app" class="mx-auto mt-12 max-w-3xl px-2">
         <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10">
 
+            <!-- CPU mode notice -->
+            <div id="cpu-banner" class="px-6 pt-5"
+                 x-show="$store.backend === 'cpu'">
+                <div class="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-800">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="mt-0.5 h-4 w-4 shrink-0 text-amber-500">
+                        <path d="M12 9v4"></path>
+                        <path d="M12 17h.01"></path>
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    </svg>
+                    <span>
+                        <span class="font-extrabold">CPU mode:</span> WebGPU wasn't detected, so the
+                        AI runs on your processor instead of the graphics card. It works in this browser,
+                        but upscaling will be <span class="font-bold">much slower</span> — for
+                        GPU-accelerated speed, use the latest Chrome or Edge on a laptop or desktop.
+                    </span>
+                </div>
+            </div>
+
 
             <!-- Unsupported -->
             <div id="unsupported-panel" class="px-6 py-14 text-center"
@@ -210,13 +233,31 @@
                     This tool relies on
                     <span id="missing-component" x-text="$store.component"
                           class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800"></span>
-                    to run the AI models directly on your device, and yours isn't available here yet.
-                    Please use the latest version of
-                    <img alt="Chrome" src="chrome.svg" class="inline h-5 w-5 align-text-bottom">
-                    Chrome or
-                    <img alt="Edge" src="edge.svg" class="inline h-5 w-5 align-text-bottom">
-                    Edge on a laptop or desktop.
+                    to decode and encode the video entirely on your device, and yours doesn't provide it yet.
+                    Please update to the latest version of your browser.
                 </p>
+                <div class="mx-auto mt-6 flex max-w-md flex-wrap items-center justify-center gap-x-6 gap-y-4">
+                    <div class="flex flex-col items-center gap-1.5">
+                        <img alt="Chrome" src="chrome.svg" class="h-9 w-9">
+                        <span class="text-xs font-semibold text-slate-600">Chrome</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1.5">
+                        <img alt="Edge" src="edge.svg" class="h-9 w-9">
+                        <span class="text-xs font-semibold text-slate-600">Edge</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1.5">
+                        <img alt="Firefox" src="firefox.svg" class="h-9 w-9">
+                        <span class="text-xs font-semibold text-slate-600">Firefox</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1.5">
+                        <img alt="Safari" src="safari.svg" class="h-9 w-9">
+                        <span class="text-xs font-semibold text-slate-600">Safari</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1.5">
+                        <img alt="Opera" src="opera.svg" class="h-9 w-9">
+                        <span class="text-xs font-semibold text-slate-600">Opera</span>
+                    </div>
+                </div>
             </div>
 
 
@@ -265,12 +306,17 @@
                 </button>
                 <input type="file" id="file-input" accept="video/mp4,.mp4" class="hidden">
 
-                <p class="mt-6 text-xs text-slate-400">
-                    Upscaling needs a
-                    <img alt="Chrome" src="chrome.svg" class="inline h-4 w-4">
-                    Chrome /
-                    <img alt="Edge" src="edge.svg" class="inline h-4 w-4">
-                    Edge browser with WebGPU on a laptop or desktop. Choosing a file works in any browser.
+                <div class="mt-7 flex items-center justify-center gap-4">
+                    <img alt="Chrome" src="chrome.svg" class="h-5 w-5 opacity-70">
+                    <img alt="Edge" src="edge.svg" class="h-5 w-5 opacity-70">
+                    <img alt="Firefox" src="firefox.svg" class="h-5 w-5 opacity-70">
+                    <img alt="Safari" src="safari.svg" class="h-5 w-5 opacity-70">
+                    <img alt="Opera" src="opera.svg" class="h-5 w-5 opacity-70">
+                </div>
+
+                <p class="mt-2 text-xs text-slate-400">
+                    Works in any modern browser. Chrome and Edge get GPU-accelerated WebGPU upscaling;
+                    other browsers fall back to the built-in CPU engine — slower, but it still works.
                 </p>
             </div>
 

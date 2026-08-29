@@ -7,14 +7,13 @@ import {
   EncodedAudioPacketSource,
   EncodedPacket,
 } from 'mediabunny';
-import WebSR from '@websr/websr';
+import type { UpscalerLike } from '../lib/upscaler';
 import InMemoryStorage from './in-memory-storage';
 
 interface ProcessorArgs {
   file: File;
   outputHandle?: FileSystemFileHandle;
-  websr: WebSR;
-  upscaled_canvas: OffscreenCanvas;
+  upscaler: UpscalerLike;
   original_canvas: OffscreenCanvas;
   resolution: { width: number; height: number };
   getPauseLock?: () => Promise<void> | null;
@@ -133,15 +132,14 @@ class VideoDecoderStream extends TransformStream<
 }
 
 /**
- * Upscale frames using WebSR and render "before" preview
+ * Upscale frames using the active upscaler (WebGPU or CPU) and render "before" preview
  */
 class VideoUpscaleStream extends TransformStream<
   { frame: VideoFrame; index: number },
   { frame: VideoFrame; index: number }
 > {
   constructor(
-    private websr: WebSR,
-    private upscaled_canvas: OffscreenCanvas,
+    private upscaler: UpscalerLike,
     private original_canvas: OffscreenCanvas,
     getPauseLock?: () => Promise<void> | null,
     private signal?: AbortSignal,
@@ -175,7 +173,7 @@ class VideoUpscaleStream extends TransformStream<
             resizeWidth: resolution.width * 2
           });
 
-          // WebSR samples its input at exactly its configured resolution,
+          // The upscaler samples its input at exactly its configured resolution,
           // so resize the frame to match when a fixed output was chosen.
           let renderInput: any = frame;
           if (frame.displayWidth !== resolution.width || frame.displayHeight !== resolution.height) {
@@ -185,8 +183,8 @@ class VideoUpscaleStream extends TransformStream<
             });
           }
 
-          // Render upscaled frame to canvas
-          await websr.render(renderInput as any);
+          // Render upscaled frame (painted to the upscaled canvas)
+          await upscaler.render(renderInput as any);
 
           if (renderInput !== frame) {
             (renderInput as ImageBitmap).close();
@@ -198,12 +196,8 @@ class VideoUpscaleStream extends TransformStream<
             ctx.transferFromImageBitmap(beforeBitmap);
           }
 
-          // Create upscaled VideoFrame from canvas
-          const upscaledFrame = new VideoFrame(upscaled_canvas, {
-            timestamp: frame.timestamp,
-            duration: frame.duration,
-            alpha: "discard"
-          });
+          // Create upscaled VideoFrame for the encoder
+          const upscaledFrame = await upscaler.toVideoFrame(frame.timestamp, frame.duration);
 
           // Clean up original frame
           frame.close();
@@ -394,7 +388,7 @@ function prettyTime(secs: number): string {
  * Main pipeline processor using Streams API
  */
 export default async function pipelineProcessor(args: ProcessorArgs): Promise<void> {
-  const { file, outputHandle, websr, upscaled_canvas, original_canvas, resolution, getPauseLock, signal } = args;
+  const { file, outputHandle, upscaler, original_canvas, resolution, getPauseLock, signal } = args;
 
   console.log('Starting pipeline processor with Streams API');
 
@@ -477,7 +471,7 @@ export default async function pipelineProcessor(args: ProcessorArgs): Promise<vo
   const pipeline = chunkStream
     .pipeThrough(new DemuxerTrackingStream(signal))
     .pipeThrough(new VideoDecoderStream(videoDecoderConfig, getPauseLock, signal))
-    .pipeThrough(new VideoUpscaleStream(websr, upscaled_canvas, original_canvas, getPauseLock, signal, resolution))
+    .pipeThrough(new VideoUpscaleStream(upscaler, original_canvas, getPauseLock, signal, resolution))
     .pipeThrough(new VideoEncoderStream(videoEncoderConfig, signal))
     .pipeTo(videoWriter, { signal: signal });
 
