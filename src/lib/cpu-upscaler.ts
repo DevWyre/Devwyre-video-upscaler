@@ -676,6 +676,14 @@ class CpuWebSR implements UpscalerLike {
       alpha: 'discard',
     });
   }
+
+  /**
+   * The most recently rendered (already upscaled) frame. Used by the
+   * compatibility mode to hand images to the main thread without WebCodecs.
+   */
+  get currentBitmap(): ImageBitmap | null {
+    return this.lastBitmap ?? null;
+  }
 }
 
 export default CpuWebSR;

@@ -37,6 +37,19 @@ let resolutionPreset: ResolutionPreset = '4k';
 let outputWidth = 0;
 let outputHeight = 0;
 
+// Compatibility mode (no WebCodecs): rendered frames are returned from the
+// worker and encoded in the main thread with MediaRecorder into a WebM file.
+let compatMode = false;
+let compatRecorder: MediaRecorder | null = null;
+let compatChunks: Blob[] = [];
+let compatStream: MediaStream | null = null;
+let compatStopped = false;
+let compatCancelled = false;
+let compatBusy = false;
+let compatPendingFrame = false;
+let compatStarted = 0;
+let latestUpscaledBitmap: ImageBitmap | null = null;
+
 // Video data
 let download_name: string;
 let inputFile: File;
@@ -127,13 +140,13 @@ async function index(): Promise<void> {
     upscaled_canvas = document.getElementById("upscaled") as HTMLCanvasElement;
     original_canvas = document.getElementById('original') as HTMLCanvasElement;
 
-    // WebCodecs is the single hard requirement — without it we can't decode or
-    // encode video at all. The AI upscaler itself runs via WebGPU when possible
-    // and falls back to the built-in CPU engine on every other browser, so we
-    // deliberately do NOT gate on WebGPU here anymore.
-    if (!("VideoEncoder" in window) || !("VideoDecoder" in window)) {
-        return showUnsupported("WebCodecs");
-    }
+    // No hard requirements: the AI upscaler runs via WebGPU when possible and
+    // falls back to the built-in CPU engine everywhere else. Browsers without
+    // WebCodecs (some phones / old mobile browsers) run in "compatibility
+    // mode": the CPU engine renders frames here in the main thread and they
+    // are encoded with MediaRecorder into a WebM file instead of MP4.
+    compatMode = !("VideoEncoder" in window) || !("VideoDecoder" in window);
+    Alpine.store('compat', compatMode);
 
     // Wire up the universal file-input fallback (works on all browsers
     // including those without the File System Access API and on mobile).
@@ -200,7 +213,7 @@ async function loadVideo(file: File): Promise<void> {
     inputFile = file;
 
     // Set up download name
-    download_name = file.name.split(".")[0] + "-upscaled.mp4";
+    download_name = file.name.split(".")[0] + "-upscaled" + (compatMode ? ".webm" : ".mp4");
     Alpine.store('download_name', download_name);
     Alpine.store('filename', file.name);
 
@@ -281,7 +294,13 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
 
         window.togglePause = function () {
             const currentState = Alpine.store('state');
-            if (currentState === 'processing') {
+            if (compatMode) {
+                if (currentState === 'processing') {
+                    compatPause();
+                } else if (currentState === 'paused') {
+                    compatResume();
+                }
+            } else if (currentState === 'processing') {
                 worker.postMessage({ cmd: 'pause' } satisfies WorkerRequestMessage);
             } else if (currentState === 'paused') {
                 worker.postMessage({ cmd: 'resume' } satisfies WorkerRequestMessage);
@@ -323,20 +342,38 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
         Alpine.store('resSizes', sizeMap);
 
 
-        const upscaled = upscaled_canvas.transferControlToOffscreen();
-        const original =    original_canvas.transferControlToOffscreen();
+        if (compatMode) {
+            // No control transfer and no WebCodecs: the worker keeps its own
+            // render surface and returns each frame as an ImageBitmap, which
+            // we paint onto the main-thread "after" canvas.
+            const before = await createImageBitmap(video);
+            paintBitmap(original_canvas, before);
+            before.close();
+
+            worker.postMessage({cmd: "init", data: {
+                    bitmap,
+                    returnBitmap: true,
+                    resolution: {
+                        width: outputWidth / 2,
+                        height: outputHeight / 2
+                    }
+                }}, [bitmap]);
+        } else {
+            const upscaled = upscaled_canvas.transferControlToOffscreen();
+            const original =    original_canvas.transferControlToOffscreen();
 
 
-        worker.postMessage({cmd: "init", data: {
-                bitmap,
-                upscaled,
-                original,
-                resolution: {
-                    width: outputWidth / 2,
-                    height: outputHeight / 2
-                }
+            worker.postMessage({cmd: "init", data: {
+                    bitmap,
+                    upscaled,
+                    original,
+                    resolution: {
+                        width: outputWidth / 2,
+                        height: outputHeight / 2
+                    }
 
-            }}, [bitmap, upscaled, original]);
+                }}, [bitmap, upscaled, original]);
+        }
 
 
         // Default to 'rl' (real life) network
@@ -485,6 +522,14 @@ async function setupPreview(data: ArrayBuffer): Promise<void> {
                 Alpine.store('width', outputWidth);
                 Alpine.store('height', outputHeight);
 
+                if (compatMode) {
+                    // The main thread owns and sizes the visible canvases here.
+                    upscaled_canvas.width = outputWidth;
+                    upscaled_canvas.height = outputHeight;
+                    original_canvas.width = outputWidth;
+                    original_canvas.height = outputHeight;
+                }
+
                 worker.postMessage({
                     cmd: 'resolution',
                     data: { width: outputWidth / 2, height: outputHeight / 2 }
@@ -540,6 +585,11 @@ worker.onmessage = function (event: MessageEvent<WorkerResponseMessage>) {
         Alpine.store('state', 'processing');
     } else if (event.data.cmd === 'cancelled') {
         Alpine.store('state', 'preview');
+    } else if (event.data.cmd === 'renderResult') {
+        // Single-frame result of the preview re-render (network change, etc.)
+        if (compatMode) handleCompatFrameResult(event.data.bitmap);
+    } else if (event.data.cmd === 'compatFrameResult') {
+        handleCompatFrameResult(event.data.bitmap);
     }
 };
 
@@ -549,7 +599,11 @@ worker.onmessage = function (event: MessageEvent<WorkerResponseMessage>) {
 window.cancelUpscaling = function (): void {
     const currentState = Alpine.store('state');
     if (currentState === 'processing' || currentState === 'paused') {
-        worker.postMessage({ cmd: 'cancel' } satisfies WorkerRequestMessage);
+        if (compatMode) {
+            compatCancel();
+        } else {
+            worker.postMessage({ cmd: 'cancel' } satisfies WorkerRequestMessage);
+        }
     }
 };
 
@@ -610,12 +664,18 @@ async function seekPreview(el: HTMLInputElement, commit: boolean): Promise<void>
 async function updateNetwork(): Promise<void> {
     const bitmap = await createImageBitmap(video);
 
+    if (compatMode) {
+        paintBitmap(original_canvas, bitmap);
+        bitmap.close();
+    }
+
     worker.postMessage({
         cmd: 'network',
         data: {
             name: networks[size].name,
             bitmap,
-            weights: weights[size][content]
+            weights: weights[size][content],
+            returnBitmap: compatMode
         }
     } satisfies WorkerRequestMessage);
 }
@@ -626,6 +686,10 @@ async function updateNetwork(): Promise<void> {
  * Start the video upscaling process
  */
 async function initRecording(): Promise<void> {
+    if (compatMode) {
+        return initCompatRecording();
+    }
+
     Alpine.store('state', 'loading');
 
     let bitrate = getBitrate();
@@ -654,6 +718,271 @@ async function initRecording(): Promise<void> {
         outputHandle
     } satisfies WorkerRequestMessage);
 }
+
+//===================  Compatibility mode (no WebCodecs) ============
+
+/**
+ * Paint an ImageBitmap (or any canvas source) onto a main-thread canvas at
+ * its pixel size. Uses a plain 2d context — the only one guaranteed to exist
+ * on older mobile browsers.
+ */
+function paintBitmap(canvas: HTMLCanvasElement, bmp: ImageBitmap | CanvasImageSource): void {
+    const c = canvas.getContext('2d') as CanvasRenderingContext2D | null;
+    if (c) {
+        c.drawImage(bmp as CanvasImageSource, 0, 0, canvas.width, canvas.height);
+    }
+}
+
+/**
+ * Compatibility mode upscaling: no WebCodecs available, so we decode with a
+ * plain <video> element, run each frame through the CPU engine in the worker,
+ * paint the result to a canvas and record a WebM with MediaRecorder.
+ */
+async function initCompatRecording(): Promise<void> {
+    Alpine.store('state', 'loading');
+
+    compatChunks = [];
+    compatStopped = false;
+    compatCancelled = false;
+    compatBusy = false;
+    compatPendingFrame = false;
+    compatStarted = performance.now();
+
+    let stream: MediaStream;
+    try {
+        // captureStream is only defined on HTMLCanvasElement (not OffscreenCanvas)
+        stream = (upscaled_canvas as any).captureStream(30) as MediaStream;
+    } catch (e) {
+        return showError('Recording is not supported in this browser. Please use Chrome, Edge or Safari on desktop instead.');
+    }
+    compatStream = stream;
+
+    // Attach the source audio so the output isn't silent, when the browser
+    // allows it. We tap the pre-gain signal, so we can silence the preview
+    // without silencing the recording.
+    try {
+        const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+        const audioCtx: AudioContext = new AudioContextCtor();
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => undefined);
+        }
+        const source = audioCtx.createMediaElementSource(video);
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+        source.connect(audioCtx.destination);
+        (dest.stream.getAudioTracks()[0] && stream.addTrack(dest.stream.getAudioTracks()[0]));
+    } catch (e) {
+        console.warn('Compatibility mode: audio capture unavailable', e);
+    }
+
+    // Pick the most broadly supported container/codec.
+    const candidates = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
+    const mimeType = candidates.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
+
+    try {
+        compatRecorder = new MediaRecorder(stream, {
+            mimeType: mimeType || undefined,
+            videoBitsPerSecond: getBitrate()
+        } as MediaRecorderOptions);
+    } catch (e) {
+        compatStream.getTracks().forEach(t => t.stop());
+        return showError('Video recording failed to start in this browser. Please use Chrome or Edge on desktop instead.');
+    }
+
+    compatRecorder.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) {
+            compatChunks.push(e.data);
+        }
+    };
+    compatRecorder.onstop = () => {
+        const type = (compatRecorder && compatRecorder.mimeType) || 'video/webm';
+        if (!compatCancelled) {
+            const blob = new Blob(compatChunks, { type });
+            Alpine.store('state', 'complete');
+            Alpine.store('download_url', window.URL.createObjectURL(blob));
+        }
+        if (compatStream) {
+            compatStream.getTracks().forEach(t => t.stop());
+            compatStream = null;
+        }
+    };
+
+    // Keep the recording canvas freshly painted even while the worker is busy.
+    requestAnimationFrame(compatFiller);
+
+    compatRecorder.start(500);
+
+    // Keep the element silent for the preview but keep the pre-gain audio for
+    // the MediaElementSource tap; start playback to drive the frame pump.
+    video.volume = 0;
+    video.muted = false;
+    try {
+        await video.play();
+    } catch (e) {
+        video.muted = true;
+        await video.play().catch(() => undefined);
+    }
+
+    video.addEventListener('ended', handleCompatEnded, { once: true });
+
+    Alpine.store('state', 'processing');
+    runCompatPump();
+}
+
+/**
+ * Lightweight rAF repainter: canvas captureStream only ships frames when the
+ * canvas is painted, so this keeps the recorder fed while the CPU engine is
+ * working on the next frame. Throttled to ~30fps for old phones.
+ */
+function compatFiller(): void {
+    if (compatStopped) return;
+    if (latestUpscaledBitmap) {
+        paintBitmap(upscaled_canvas, latestUpscaledBitmap);
+    }
+    requestAnimationFrame(compatFiller);
+}
+
+/**
+ * Drive the frame pump: on every presented video frame, grab it, show it as
+ * the "before" preview and hand it to the worker for upscaling. Only the
+ * latest frame is processed; slower devices simply skip intermediate frames.
+ */
+function runCompatPump(): void {
+    const pumpFrame = async (): Promise<void> => {
+        if (compatStopped) return;
+
+        if (compatBusy) {
+            compatPendingFrame = true;
+            return;
+        }
+
+        do {
+            compatPendingFrame = false;
+            compatBusy = true;
+            try {
+                const bmp = await createImageBitmap(video);
+                paintBitmap(original_canvas, bmp);
+
+                const stagingWidth = Math.round(outputWidth / 2);
+                const stagingHeight = Math.round(outputHeight / 2);
+
+                worker.postMessage({
+                    cmd: 'compatFrame',
+                    data: {
+                        bitmap: bmp,
+                        width: stagingWidth,
+                        height: stagingHeight
+                    }
+                } as any, [bmp]);
+
+                if (video.duration) {
+                    const progress = Math.min(99, Math.round((video.currentTime / video.duration) * 100));
+                    Alpine.store('progress', progress);
+                    if (Alpine.store('state') !== 'processing') {
+                        Alpine.store('state', 'processing');
+                    }
+
+                    const elapsed = performance.now() - compatStarted;
+                    if (elapsed > 1000 && progress > 0) {
+                        const rate = progress / elapsed; // percent per ms
+                        const etaSecs = Math.round((100 - progress) / rate / 1000);
+                        Alpine.store('eta', formatTime(etaSecs));
+                    } else {
+                        Alpine.store('eta', 'calculating...');
+                    }
+                }
+            } catch (e) {
+                if (!compatStopped) showError('Failed to process a frame: ' + ((e as Error)?.message || e));
+            } finally {
+                compatBusy = false;
+            }
+        } while (compatPendingFrame && !compatStopped);
+
+        if (!compatStopped) scheduleNextFrame();
+    };
+
+    const scheduleNextFrame = (): void => {
+        if (compatStopped) return;
+        const v = video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number };
+        if (v.requestVideoFrameCallback) {
+            v.requestVideoFrameCallback(pumpFrame);
+        } else {
+            requestAnimationFrame(pumpFrame);
+        }
+    };
+
+    scheduleNextFrame();
+}
+
+/**
+ * When the source video finishes, stop the recorder and produce the WebM blob.
+ */
+function handleCompatEnded(): void {
+    if (compatStopped) return;
+    compatStopped = true;
+
+    Alpine.store('progress', 100);
+    Alpine.store('eta', '0:00');
+
+    if (compatRecorder && compatRecorder.state !== 'inactive') {
+        compatRecorder.stop();
+    }
+}
+
+/**
+ * Store each upscaled frame from the worker and paint it to the "after"
+ * canvas, which is the surface being recorded.
+ */
+function handleCompatFrameResult(bitmap: ImageBitmap): void {
+    if (compatStopped) {
+        bitmap.close();
+        return;
+    }
+    if (latestUpscaledBitmap) {
+        latestUpscaledBitmap.close();
+    }
+    latestUpscaledBitmap = bitmap;
+    paintBitmap(upscaled_canvas, bitmap);
+}
+
+/**
+ * Pause / resume / cancel used by the compat recording path.
+ */
+function compatPause(): void {
+    if (compatRecorder && compatRecorder.state === 'recording') compatRecorder.pause();
+    video.pause();
+    Alpine.store('state', 'paused');
+}
+
+function compatResume(): void {
+    if (compatRecorder && compatRecorder.state === 'paused') compatRecorder.resume();
+    video.play().catch(() => undefined);
+    Alpine.store('state', 'processing');
+}
+
+function compatCancel(): void {
+    compatStopped = true;
+    compatCancelled = true;
+    video.pause();
+    try {
+        video.removeAttribute('src');
+        video.load();
+    } catch (e) { /* ignored */ }
+    if (compatRecorder && compatRecorder.state !== 'inactive') {
+        try { compatRecorder.stop(); } catch (e) { /* ignored */ }
+    }
+    if (compatStream) {
+        compatStream.getTracks().forEach(t => t.stop());
+        compatStream = null;
+    }
+    if (latestUpscaledBitmap) {
+        latestUpscaledBitmap.close();
+        latestUpscaledBitmap = null;
+    }
+    Alpine.store('state', 'preview');
+}
+
+/**
 
 /**
  * Display error message to user

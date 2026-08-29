@@ -98,14 +98,27 @@ function buildUpscaler(): UpscalerLike {
 }
 
 /**
- * Initialize the worker with canvases and create the upscaler instance
+ * Initialize the worker with canvases and create the upscaler instance.
+ *
+ * In compatibility mode (main thread has no WebCodecs) the main thread does
+ * not transfer its canvases — the worker creates its own render surfaces and
+ * returns every rendered frame back to the main thread as an ImageBitmap.
  */
 async function init(config: InitData): Promise<void> {
   await resolveBackend();
 
   resolution = config.resolution;
-  upscaled_canvas = config.upscaled;
-  original_canvas = config.original;
+  const compat = !config.upscaled;
+  if (compat) backend = 'cpu';
+
+  if (compat) {
+    // Worker-owned render surfaces; the main thread only ever sees ImageBitmaps.
+    upscaled_canvas = new OffscreenCanvas(resolution.width * 2, resolution.height * 2);
+    original_canvas = new OffscreenCanvas(resolution.width * 2, resolution.height * 2);
+  } else {
+    upscaled_canvas = config.upscaled!;
+    original_canvas = config.original!;
+  }
 
   upscaler = buildUpscaler();
 
@@ -134,12 +147,19 @@ async function init(config: InitData): Promise<void> {
   if (ctx) {
     ctx.transferFromImageBitmap(bitmap2);
   }
+
+  if (config.returnBitmap && compat) {
+    const bmp = (upscaler as CpuWebSR).currentBitmap;
+    if (bmp) {
+      postMessage({ cmd: 'renderResult', bitmap: bmp } satisfies WorkerResponseMessage, [bmp]);
+    }
+  }
 }
 
 /**
  * Switch to a different AI upscaling network
  */
-async function switchNetwork(name: string, weightData: any, bitmap: ImageBitmap): Promise<void> {
+async function switchNetwork(name: string, weightData: any, bitmap: ImageBitmap, returnBitmap?: boolean): Promise<void> {
   currentNetworkName = name;
   currentWeights = weightData;
   upscaler!.switchNetwork(name, weightData);
@@ -166,6 +186,13 @@ async function switchNetwork(name: string, weightData: any, bitmap: ImageBitmap)
 
   if (ctx) {
     ctx.transferFromImageBitmap(before);
+  }
+
+  if (returnBitmap) {
+    const bmp = (upscaler as CpuWebSR).currentBitmap;
+    if (bmp) {
+      postMessage({ cmd: 'renderResult', bitmap: bmp } satisfies WorkerResponseMessage, [bmp]);
+    }
   }
 }
 
@@ -273,13 +300,39 @@ self.onmessage = async function (event: MessageEvent<WorkerRequestMessage>) {
       await switchNetwork(
         event.data.data.name,
         event.data.data.weights,
-        event.data.data.bitmap
+        event.data.data.bitmap,
+        event.data.data.returnBitmap === true
       );
       break;
 
     case 'resolution':
       await setResolution(event.data.data);
       break;
+
+    case 'compatFrame': {
+      // Compatibility mode: upscale a single frame handed over from the main
+      // thread and return the result as a transferable ImageBitmap.
+      const data = event.data.data;
+      let src: any = data.bitmap;
+      if (src.width !== resolution.width || src.height !== resolution.height) {
+        src = await createImageBitmap(data.bitmap, {
+          resizeWidth: resolution.width,
+          resizeHeight: resolution.height,
+        });
+      }
+
+      await upscaler!.render(src as any);
+
+      if (src !== data.bitmap) {
+        src.close();
+      }
+
+      const bmp = (upscaler as CpuWebSR).currentBitmap;
+      if (bmp) {
+        postMessage({ cmd: 'compatFrameResult', bitmap: bmp } satisfies WorkerResponseMessage, [bmp]);
+      }
+      break;
+    }
     }
   } catch (e: any) {
     // Never let an error escape as an unhandled rejection in the worker.
