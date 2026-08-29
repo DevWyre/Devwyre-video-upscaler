@@ -207,10 +207,11 @@
                 </div>
                 <h2 class="mt-5 text-xl font-extrabold text-slate-900">Your browser isn't supported yet</h2>
                 <p class="mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-600">
-                    Your browser is missing
+                    This tool relies on
                     <span id="missing-component" x-text="$store.component"
-                          class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800"></span>,
-                    a required feature for this tool. Please use the latest version of
+                          class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800"></span>
+                    to run the AI models directly on your device, and yours isn't available here yet.
+                    Please use the latest version of
                     <img alt="Chrome" src="chrome.svg" class="inline h-5 w-5 align-text-bottom">
                     Chrome or
                     <img alt="Edge" src="edge.svg" class="inline h-5 w-5 align-text-bottom">
@@ -259,16 +260,17 @@
                 </p>
 
                 <button type="button" id="input-button" onclick="chooseFile(this)"
-                        class="btn-primary-gradient mt-7">
+                        class="btn-primary-gradient mt-7 w-full max-w-xs">
                     Choose a video file
                 </button>
+                <input type="file" id="file-input" accept="video/mp4,.mp4" class="hidden">
 
-                <p class="mt-6 flex items-center gap-1.5 text-xs text-slate-400">
-                    Works best in
-                    <img alt="Chrome" src="chrome.svg" class="h-4 w-4">
+                <p class="mt-6 text-xs text-slate-400">
+                    Upscaling needs a
+                    <img alt="Chrome" src="chrome.svg" class="inline h-4 w-4">
                     Chrome /
-                    <img alt="Edge" src="edge.svg" class="h-4 w-4">
-                    Edge on desktop.
+                    <img alt="Edge" src="edge.svg" class="inline h-4 w-4">
+                    Edge browser with WebGPU on a laptop or desktop. Choosing a file works in any browser.
                 </p>
             </div>
 
@@ -291,14 +293,14 @@
                 </div>
 
                 <div x-show="$store.state === 'preview'" class="mt-4">
-                    <div class="flex items-center gap-3">
-                        <span class="w-12 shrink-0 text-right font-mono text-xs text-slate-500" x-text="$store.previewPos"></span>
-                        <input type="range" id="scrubber" class="scrubber flex-1"
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <span class="w-11 shrink-0 text-right font-mono text-xs text-slate-500 sm:w-12" x-text="$store.previewPos"></span>
+                        <input type="range" id="scrubber" class="scrubber min-w-0 flex-1"
                                min="0" step="0.05" :max="$store.duration" :value="$store.preview"
                                oninput="seekPreview(this, false)"
                                onchange="seekPreview(this, true)"
                                aria-label="Scrub through the video to preview">
-                        <span class="w-32 shrink-0 font-mono text-xs text-slate-500" x-text="'- ' + $store.previewLeft + ' left'"></span>
+                        <span class="hidden shrink-0 font-mono text-xs text-slate-500 sm:block sm:w-32 sm:text-left" x-text="'- ' + $store.previewLeft + ' left'"></span>
                     </div>
                 </div>
 
@@ -326,7 +328,7 @@
                                 <p class="text-sm font-bold text-slate-800">AI model</p>
                                 <p class="mt-0.5 text-xs text-slate-500">Fast is quickest; Ultra is slowest but sharpest.</p>
                             </div>
-                            <div class="radio-pill">
+                            <div class="radio-pill flex-wrap">
                                 <input type="radio" name="options" id="option1" value="small"
                                        onclick="switchNetworkSize(this);" autocomplete="off">
                                 <label for="option1">Fast</label>
@@ -346,7 +348,7 @@
                                 <p class="text-sm font-bold text-slate-800">Output resolution</p>
                                 <p class="mt-0.5 text-xs text-slate-500">Outputs a fixed 1080p, 2K, 4K or 8K frame. Sizes are estimates.</p>
                             </div>
-                            <div class="radio-pill radio-pill-res">
+                            <div class="radio-pill radio-pill-res flex-wrap">
                                 <input type="radio" name="resolution" id="res1" value="1080"
                                        onclick="switchResolution(this);" autocomplete="off">
                                 <label for="res1">
