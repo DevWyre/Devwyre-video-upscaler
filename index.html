@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta
+            content="A free web tool for AI upscaling videos right in the browser, no signup or software installation required. Turn any MP4 into crisp 1080p, 2K or 4K video"
+            name="description">
+    <meta content="Devwyre / Video Upscaler" property="og:title">
+    <meta
+            content="A free web tool for AI upscaling videos right in the browser, no signup or software installation required. Turn any MP4 into crisp 1080p, 2K or 4K video"
+            property="og:description">
+    <meta content="hero-screenshot-anime4k-small.png" property="og:image">
+    <meta content="Devwyre / Video Upscaler" property="twitter:title">
+    <meta
+            content="A free web tool for AI upscaling videos right in the browser, no signup or software installation required. Turn any MP4 into crisp 1080p, 2K or 4K video"
+            property="twitter:description">
+    <meta content="summary_large_image" name="twitter:card">
+    <meta property="og:type" content="website">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="logo.svg">
+    <title>Devwyre / Video Upscaler — Upscale videos in your browser</title>
+<script defer src="main.js"></script></head>
+
+
+<body x-data="{}" style="display: none;" class="font-manrope">
+
+
+<!-- ─────────────────────────── Header ─────────────────────────── -->
+<header class="fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
+    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+        <a href="#" onclick="goHome()" title="Back to home" class="flex items-center gap-2.5">
+            <img src="logo.svg" alt="Devwyre / Video Upscaler logo" class="h-8 w-8">
+            <span class="text-[15px] font-extrabold leading-tight tracking-tight text-slate-900">
+                <span class="block bg-gradient-to-r from-teal-600 to-cyan-500 bg-clip-text text-transparent">Devwyre</span>
+                <span class="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Video Upscaler</span>
+            </span>
+        </a>
+        <nav class="hidden items-center gap-6 text-sm font-medium text-slate-600 sm:flex">
+            <a href="#how-it-works" class="transition hover:text-slate-900">How it works</a>
+            <a href="#app" class="transition hover:text-slate-900">Try it</a>
+            <a href="https://devwyre.com/about" target="_blank" rel="noopener" title="Learn more about Devwyre"
+               class="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3.5 py-1.5 font-bold text-teal-700 transition hover:bg-teal-100 hover:text-teal-900">
+                Learn more
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+            </a>
+        </nav>
+    </div>
+</header>
+
+
+<main class="px-4 pb-16 pt-24 sm:px-6">
+
+
+    <!-- ─────────────────────────── Hero ─────────────────────────── -->
+    <section class="mx-auto max-w-3xl px-2 pt-4 text-center"
+             x-show="$store.state === 'init' || $store.state === 'unsupported'">
+        <span class="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3.5 py-1 text-xs font-bold uppercase tracking-wide text-teal-700">
+            <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+            100% local · WebGPU · Free
+        </span>
+
+        <h1 id="title" class="mt-6 text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+            Upscale your videos with AI,<br class="hidden sm:block">
+            <span class="bg-gradient-to-r from-teal-600 via-cyan-500 to-sky-500 bg-clip-text text-transparent">right in your browser</span>
+        </h1>
+
+        <p id="hero-text" class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
+            Turn any MP4 into crisp 1080p, 2K, 4K or even 8K video with cutting-edge AI super-resolution models running on WebGPU.
+            No signups, no installs, no uploads — your files never leave your device.
+        </p>
+    </section>
+
+
+    <!-- ─────────────────────────── How it works ─────────────────────────── -->
+    <section id="how-it-works" class="mx-auto max-w-5xl px-2 pt-12"
+             x-show="$store.state === 'init' || $store.state === 'unsupported'">
+        <div class="mb-8 text-center">
+            <h2 id="how-it-works-title" class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">How it works</h2>
+            <p class="mt-2 text-sm text-slate-500">Three simple steps from your device to a sharper video.</p>
+        </div>
+
+        <div class="grid gap-5 sm:grid-cols-3">
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md">
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-100">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-teal-600">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <h3 class="mt-4 text-base font-extrabold text-slate-900">1. Choose a video</h3>
+                <p class="mt-1.5 text-sm leading-relaxed text-slate-500">Pick any MP4 from your device. Nothing is uploaded — everything stays local.</p>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md">
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-100">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-cyan-600">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                </div>
+                <h3 class="mt-4 text-base font-extrabold text-slate-900">2. AI upscales it</h3>
+                <p class="mt-1.5 text-sm leading-relaxed text-slate-500">Super-resolution models run in real time on your own graphics card via WebGPU. Preview the result with a before/after slider.</p>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md">
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-sky-600">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                </div>
+                <h3 class="mt-4 text-base font-extrabold text-slate-900">3. Download & enjoy</h3>
+                <p class="mt-1.5 text-sm leading-relaxed text-slate-500">Get a crisp 1080p, 2K, 4K or 8K MP4 — with audio preserved — ready to watch or share.</p>
+            </div>
+        </div>
+
+        <details class="group mt-8 select-none overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 p-6 sm:p-8">
+                <span class="flex items-center gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 text-white">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                            <rect x="9" y="9" width="6" height="6"></rect>
+                            <line x1="9" y1="1" x2="9" y2="4"></line>
+                            <line x1="15" y1="1" x2="15" y2="4"></line>
+                            <line x1="9" y1="20" x2="9" y2="23"></line>
+                            <line x1="15" y1="20" x2="15" y2="23"></line>
+                            <line x1="20" y1="9" x2="23" y2="9"></line>
+                            <line x1="20" y1="14" x2="23" y2="14"></line>
+                            <line x1="1" y1="9" x2="4" y2="9"></line>
+                            <line x1="1" y1="14" x2="4" y2="14"></line>
+                        </svg>
+                    </span>
+                    <span>
+                        <span class="block text-lg font-extrabold text-slate-900">Devwyre's Video Upscaler</span>
+                        <span class="block text-xs font-medium text-slate-500">What actually happens behind the scenes</span>
+                    </span>
+                </span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </summary>
+            <div class="space-y-3 px-6 pb-6 text-sm leading-relaxed text-slate-600 sm:px-8 sm:pb-8">
+                <p>
+                    Our Video Upscaler doesn't just stretch your video — that would only make it
+                    blurrier. A super-resolution neural network, trained on millions of
+                    images, looks at each frame and rebuilds the detail that isn't there:
+                    sharper edges, cleaner textures and less visible noise.
+                </p>
+
+                <p class="pt-2 font-extrabold text-slate-900">The process, step by step:</p>
+
+                <ol class="space-y-2.5">
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">1</span>
+                        <span><strong class="font-bold text-slate-800">Demux.</strong> Your video's audio and picture tracks are separated. The audio is never touched — it's copied and re-attached at the end, so speech, music and timing stay exactly as they were.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">2</span>
+                        <span><strong class="font-bold text-slate-800">Decode.</strong> The picture track is read frame by frame so every still image can be processed individually.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">3</span>
+                        <span><strong class="font-bold text-slate-800">Reconstruct.</strong> Each frame runs through the AI model on your own graphics card (WebGPU), doubling the resolution and rebuilding lost detail. Models range from Fast to Ultra — more compute, even sharper results.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">4</span>
+                        <span><strong class="font-bold text-slate-800">Preview.</strong> A before/after slider compares the original next to the upscaled version, and the scrubber lets you inspect any moment before you commit — without re-processing the whole video.</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xs font-extrabold text-teal-700">5</span>
+                        <span><strong class="font-bold text-slate-800">Encode & attach.</strong> The enhanced frames are compressed into a fresh MP4 (H.264) at your chosen resolution, then your original audio track is muxed back in — ready to download or save.</span>
+                    </li>
+                </ol>
+
+                <p class="pt-2">
+                    Everything runs locally, so your file never leaves your device and no
+                    server ever sees it. Longer videos take longer, but you can pause,
+                    cancel or re-preview any moment along the way.
+                </p>
+            </div>
+        </details>
+    </section>
+
+
+    <!-- ─────────────────────────── App card ─────────────────────────── -->
+    <div id="app" class="mx-auto mt-12 max-w-3xl px-2">
+        <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10">
+
+
+            <!-- Unsupported -->
+            <div id="unsupported-panel" class="px-6 py-14 text-center"
+                 x-show="$store.state === 'unsupported'">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-100">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-8 w-8 text-amber-600">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <h2 class="mt-5 text-xl font-extrabold text-slate-900">Your browser isn't supported yet</h2>
+                <p class="mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-600">
+                    Your browser is missing
+                    <span id="missing-component" x-text="$store.component"
+                          class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800"></span>,
+                    a required feature for this tool. Please use the latest version of
+                    <img alt="Chrome" src="chrome.svg" class="inline h-5 w-5 align-text-bottom">
+                    Chrome or
+                    <img alt="Edge" src="edge.svg" class="inline h-5 w-5 align-text-bottom">
+                    Edge on a laptop or desktop.
+                </p>
+            </div>
+
+
+            <!-- Loading -->
+            <div id="loading-panel" class="flex h-80 items-center justify-center px-6"
+                 x-show="$store.state === 'loading'">
+                <div class="text-center">
+                    <img src="loading.svg" alt="Loading" class="mx-auto h-24 w-24">
+                    <p class="mt-5 text-sm font-semibold text-slate-500">Preparing your video…</p>
+                </div>
+            </div>
+
+
+            <!-- Error -->
+            <div id="error-panel" class="px-6 py-14 text-center"
+                 x-show="$store.state === 'error'">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="h-8 w-8 text-red-600">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <h2 class="mt-5 text-xl font-extrabold text-slate-900">Something went wrong</h2>
+                <p class="mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-600">
+                    An error occurred while processing the video:
+                    <span x-text="$store.error" class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-800"></span>
+                </p>
+            </div>
+
+
+            <!-- Choose a file -->
+            <div id="file-load-panel" class="flex flex-col items-center px-6 py-14 text-center"
+                 x-show="$store.state === 'init'">
+                <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-600 shadow-lg shadow-teal-500/30">
+                    <img src="play.svg" alt="" class="h-7 w-7">
+                </div>
+                <h2 class="mt-5 text-xl font-extrabold text-slate-900">Choose a video to upscale</h2>
+                <p class="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+                    MP4 files up to about 2&nbsp;GB. Larger files are streamed straight to disk.
+                </p>
+
+                <button type="button" id="input-button" onclick="chooseFile(this)"
+                        class="btn-primary-gradient mt-7">
+                    Choose a video file
+                </button>
+
+                <p class="mt-6 flex items-center gap-1.5 text-xs text-slate-400">
+                    Works best in
+                    <img alt="Chrome" src="chrome.svg" class="h-4 w-4">
+                    Chrome /
+                    <img alt="Edge" src="edge.svg" class="h-4 w-4">
+                    Edge on desktop.
+                </p>
+            </div>
+
+
+            <!-- Start / Progress / Complete -->
+            <div id="start-panel" class="p-5 sm:p-8"
+                 x-show="$store.state === 'preview' || $store.state === 'processing' || $store.state === 'complete' || $store.state === 'paused'">
+
+                <div id="image-compare-outer">
+                    <div id="image-compare">
+                        <canvas id="original"></canvas>
+                        <canvas id="upscaled"></canvas>
+                    </div>
+                    <img src="full-screen.svg" alt="Full screen" id="full-screen" class="absolute z-10 cursor-pointer"
+                         x-show="$store.state === 'preview'">
+                </div>
+
+                <div x-show="$store.state === 'preview'" class="mt-3 text-center text-xs font-semibold text-slate-400">
+                    Drag to compare original vs. upscaled
+                </div>
+
+                <div x-show="$store.state === 'preview'" class="mt-4">
+                    <div class="flex items-center gap-3">
+                        <span class="w-12 shrink-0 text-right font-mono text-xs text-slate-500" x-text="$store.previewPos"></span>
+                        <input type="range" id="scrubber" class="scrubber flex-1"
+                               min="0" step="0.05" :max="$store.duration" :value="$store.preview"
+                               oninput="seekPreview(this, false)"
+                               onchange="seekPreview(this, true)"
+                               aria-label="Scrub through the video to preview">
+                        <span class="w-32 shrink-0 font-mono text-xs text-slate-500" x-text="'- ' + $store.previewLeft + ' left'"></span>
+                    </div>
+                </div>
+
+
+                <!-- Preview pane -->
+                <div id="preview" x-show="$store.state === 'preview'" class="mt-6">
+
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-600">
+                            <span class="shrink-0 text-slate-400">Upscaling</span>
+                            <span x-text="$store.filename"
+                                  class="max-w-[180px] truncate rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700"></span>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-slate-600">
+                            <span class="rounded-lg bg-teal-50 px-2 py-1 font-mono text-xs font-bold text-teal-700">
+                                <span x-text="$store.width"></span>×<span x-text="$store.height"></span>
+                            </span>
+                            <span class="text-slate-400">→ ~ <span x-text="$store.size" class="font-mono"></span></span>
+                        </div>
+                    </div>
+
+                    <div id="settings" class="mt-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">AI model</p>
+                                <p class="mt-0.5 text-xs text-slate-500">Fast is quickest; Ultra is slowest but sharpest.</p>
+                            </div>
+                            <div class="radio-pill">
+                                <input type="radio" name="options" id="option1" value="small"
+                                       onclick="switchNetworkSize(this);" autocomplete="off">
+                                <label for="option1">Fast</label>
+
+                                <input type="radio" name="options" id="option2" value="medium"
+                                       onclick="switchNetworkSize(this);" autocomplete="off" checked>
+                                <label for="option2">Balanced</label>
+
+                                <input type="radio" name="options" id="option3" value="large"
+                                       onclick="switchNetworkSize(this);" autocomplete="off">
+                                <label for="option3">Ultra</label>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-4">
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">Output resolution</p>
+                                <p class="mt-0.5 text-xs text-slate-500">Outputs a fixed 1080p, 2K, 4K or 8K frame. Sizes are estimates.</p>
+                            </div>
+                            <div class="radio-pill radio-pill-res">
+                                <input type="radio" name="resolution" id="res1" value="1080"
+                                       onclick="switchResolution(this);" autocomplete="off">
+                                <label for="res1">
+                                    <span class="opt-name">1080p</span>
+                                    <span class="opt-size" x-text="$store.resSizes['1080']"></span>
+                                </label>
+
+                                <input type="radio" name="resolution" id="res2" value="2k"
+                                       onclick="switchResolution(this);" autocomplete="off">
+                                <label for="res2">
+                                    <span class="opt-name">2K</span>
+                                    <span class="opt-size" x-text="$store.resSizes['2k']"></span>
+                                </label>
+
+                                <input type="radio" name="resolution" id="res3" value="4k"
+                                       onclick="switchResolution(this);" autocomplete="off" checked>
+                                <label for="res3">
+                                    <span class="opt-name">4K</span>
+                                    <span class="opt-size" x-text="$store.resSizes['4k']"></span>
+                                </label>
+
+                                <input type="radio" name="resolution" id="res4" value="8k"
+                                       onclick="switchResolution(this);" autocomplete="off">
+                                <label for="res4">
+                                    <span class="opt-name">8K</span>
+                                    <span class="opt-size" x-text="$store.resSizes['8k']"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-7 flex justify-center">
+                        <button type="button" onclick="initRecording()"
+                                x-show="$store.target === 'writer'"
+                                class="btn-primary-gradient">
+                            Choose output location
+                            <img src="folder.svg" alt="" class="h-4 w-4">
+                        </button>
+
+                        <button type="button" onclick="initRecording()"
+                                x-show="$store.target === 'blob'"
+                                class="btn-primary-gradient">
+                            Start upscaling
+                            <img src="play.svg" alt="" class="h-4 w-4">
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- Processing pane -->
+                <div id="info" x-show="$store.state === 'processing' || $store.state === 'paused'" class="mt-8">
+
+                    <div class="flex items-center justify-between gap-4 text-sm">
+                        <div class="flex min-w-0 items-center gap-2 font-medium text-slate-600">
+                            <span class="shrink-0 text-slate-400">Upscaling</span>
+                            <span x-text="$store.filename"
+                                  class="max-w-[180px] truncate rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700"></span>
+                        </div>
+                        <p class="shrink-0 text-slate-500">Time left: <span x-text="$store.eta" class="font-mono font-semibold text-slate-700"></span></p>
+                    </div>
+
+                    <div class="progress mt-4" id="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                             x-bind:class="{ 'bg-warning': $store.state === 'paused' }"
+                             role="progressbar"
+                             x-bind:style="{width: $store.progress + '%'}"
+                             x-bind:aria-valuenow="$store.progress"
+                             aria-valuemin="0"
+                             aria-valuemax="100"
+                             style="width: 75%"></div>
+                    </div>
+
+                    <p x-show="$store.state === 'paused'"
+                       class="mt-3 text-center text-sm font-bold text-amber-600">Processing paused</p>
+
+                    <div class="mt-5 flex flex-wrap justify-center gap-3">
+                        <button type="button" onclick="togglePause()"
+                                x-text="$store.state === 'paused' ? 'Resume upscaling' : 'Pause upscaling'"
+                                class="btn-secondary">
+                            Pause upscaling
+                        </button>
+
+                        <button type="button" onclick="cancelUpscaling()" class="btn-danger">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+
+                <!-- Complete pane -->
+                <div id="download-link" class="mt-8 flex flex-col" x-show="$store.state === 'complete'">
+
+                    <div class="text-center">
+                        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8 text-emerald-600">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h3 class="mt-5 text-xl font-extrabold text-slate-900">Your video is upscaled!</h3>
+                        <p class="mt-2 text-sm text-slate-500">
+                            <span x-show="$store.target == 'writer'">Saved to
+                                <span x-text="$store.download_name" class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-slate-700"></span>
+                            </span>
+                            <span x-show="$store.target == 'blob'">Your enhanced video is ready to download below.</span>
+                        </p>
+                    </div>
+
+                    <div class="mt-7 flex flex-wrap justify-center gap-3">
+                        <button type="button" onclick="location.reload();" class="btn-secondary">
+                            Upscale another
+                            <img src="refresh.svg" alt="" class="h-4 w-4">
+                        </button>
+
+                        <a x-bind:href="$store.download_url" x-bind:download="$store.download_name"
+                           x-show="$store.target == 'blob'" class="no-underline">
+                            <button type="button" id="download" class="btn-primary-gradient">
+                                Download
+                                <img src="download-icon.svg" alt="" class="h-4 w-4">
+                            </button>
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+
+</main>
+
+
+<!-- ─────────────────────────── Footer ─────────────────────────── -->
+<footer id="footer" class="border-t border-slate-200 bg-white/70">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-6 text-sm text-slate-500 sm:flex-row">
+        <span class="flex flex-col leading-tight">
+            <span class="bg-gradient-to-r from-teal-600 to-cyan-500 bg-clip-text font-extrabold text-slate-900 text-transparent">Devwyre</span>
+            <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Video Upscaler</span>
+        </span>
+        <span class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs">
+            <span class="flex items-center gap-1.5">Runs entirely in your browser · 100% private</span>
+            <a href="https://devwyre.com/about" target="_blank" rel="noopener" title="Learn more about Devwyre"
+               class="inline-flex items-center gap-1 font-bold text-teal-700 transition hover:text-teal-900">
+                Learn more
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+            </a>
+        </span>
+    </div>
+</footer>
+
+
+</body>
+
+</html>
