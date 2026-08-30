@@ -2,6 +2,8 @@
 
 A free, browser-based AI video upscaler by **Devwyre**. No uploads, no signups — everything runs entirely on your device using WebGPU.
 
+**Open source** — this project is free and open source. Star it and follow development on GitHub: [github.com/DevWyre/Devwyre-video-upscaler](https://github.com/DevWyre/Devwyre-video-upscaler)
+
 ## What It Does
 
 Pick an MP4, choose your settings, and let AI upscale your video right in the browser. The app uses Devwyre's own convolutional neural networks, accelerated by hand-written WebGPU compute shaders, to double your video's resolution in real time.
